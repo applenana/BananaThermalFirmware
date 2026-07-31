@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 *.key
 *.pem
+!keys/build-diagnostics-encryption-cert.pem

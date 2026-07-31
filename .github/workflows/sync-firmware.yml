@@ -108,6 +108,40 @@ jobs:
             echo "Built ${environment}."
           done
 
+      - name: Encrypt private build diagnostics on failure
+        if: failure() && steps.select.outputs.tag != '' && inputs.check_only != true
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          logs=("$RUNNER_TEMP"/platformio-*.log)
+          test "${#logs[@]}" -gt 0
+          archive="$RUNNER_TEMP/platformio-build-diagnostics.tar.gz"
+          encrypted="$RUNNER_TEMP/platformio-build-diagnostics.cms"
+          names=()
+          for log in "${logs[@]}"; do
+            names+=("$(basename "$log")")
+          done
+          tar -C "$RUNNER_TEMP" -czf "$archive" "${names[@]}"
+          openssl cms -encrypt \
+            -binary \
+            -aes-256-cbc \
+            -in "$archive" \
+            -outform DER \
+            -out "$encrypted" \
+            keys/build-diagnostics-encryption-cert.pem
+          rm -f "$archive" "${logs[@]}"
+
+      - name: Upload encrypted build diagnostics
+        if: failure() && steps.select.outputs.tag != '' && inputs.check_only != true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: encrypted-build-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/platformio-build-diagnostics.cms
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
       - name: Create the unsigned release allowlist
         if: steps.select.outputs.tag != '' && inputs.check_only != true
         shell: bash
