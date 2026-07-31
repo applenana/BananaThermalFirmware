@@ -1,0 +1,77 @@
+name: 固件问题
+description: 报告可复现的刷写、显示、测温、推流或兼容性问题
+title: "[固件问题] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先阅读固件变体说明和故障排查。安全漏洞不要在这里公开。
+  - type: input
+    id: firmware
+    attributes:
+      label: 固件版本与变体
+      placeholder: v1.6.0 / sketch3m_fs5m_stable
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: 硬件与 Flash 容量
+      placeholder: 设备批次、8 MB 或 2 MB
+    validations:
+      required: true
+  - type: dropdown
+    id: sensor
+    attributes:
+      label: 热像传感器
+      options:
+        - MLX90640
+        - MLX90641
+        - Heimann HTPA32x32
+        - 不确定
+    validations:
+      required: true
+  - type: dropdown
+    id: screen
+    attributes:
+      label: 屏幕模式
+      options:
+        - 全屏 320×240
+        - 方屏 240×240
+        - 两种模式都会发生
+        - 与屏幕模式无关
+    validations:
+      required: true
+  - type: input
+    id: studio
+    attributes:
+      label: 上位机与操作系统
+      placeholder: NextBananaThermalStudio v0.4.2 / Windows 11
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 请给出能够稳定触发问题的最短步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期与实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: thermal_view
+    attributes:
+      label: Thermal View 响应
+      description: 如与投屏有关，请粘贴已经脱敏的响应。
+      render: json
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已经删除日志中的序列号、激活信息、客户照片和其他敏感内容
+          required: true

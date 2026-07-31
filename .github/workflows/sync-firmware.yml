@@ -1,0 +1,193 @@
+name: Publish official firmware releases
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional exact official tag (vMAJOR.MINOR.PATCH)"
+        required: false
+        type: string
+
+concurrency:
+  group: firmware-tag-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Check, build and publish one missing tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: firmware-release
+    env:
+      UPSTREAM_REPOSITORY: ${{ vars.UPSTREAM_REPOSITORY }}
+      GITHUB_TOKEN: ${{ github.token }}
+      REQUESTED_TAG: ${{ inputs.tag || '' }}
+
+    steps:
+      - name: Check out public release configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure authenticated read-only source transport
+        shell: bash
+        env:
+          UPSTREAM_READ_KEY: ${{ secrets.UPSTREAM_READ_KEY }}
+          UPSTREAM_SSH_KNOWN_HOSTS: ${{ vars.UPSTREAM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$UPSTREAM_REPOSITORY"
+          test -n "$UPSTREAM_READ_KEY"
+          test -n "$UPSTREAM_SSH_KNOWN_HOSTS"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$UPSTREAM_READ_KEY" > "$HOME/.ssh/upstream_read_key"
+          printf '%s\n' "$UPSTREAM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/upstream_read_key" "$HOME/.ssh/known_hosts"
+          {
+            echo "GIT_SSH_COMMAND=ssh -i $HOME/.ssh/upstream_read_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+          } >> "$GITHUB_ENV"
+
+      - name: Select one unpublished official tag
+        id: select
+        run: python scripts/select_release.py
+
+      - name: Fetch the exact tagged source
+        if: steps.select.outputs.tag != ''
+        id: source
+        shell: bash
+        env:
+          FIRMWARE_TAG: ${{ steps.select.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p .work/source
+          git -C .work/source init --quiet
+          git -C .work/source remote add origin "git@github.com:${UPSTREAM_REPOSITORY}.git"
+          git -C .work/source fetch --quiet --depth=1 origin "refs/tags/${FIRMWARE_TAG}:refs/tags/${FIRMWARE_TAG}"
+          git -C .work/source checkout --quiet --detach "refs/tags/${FIRMWARE_TAG}"
+          test -z "$(git -C .work/source status --porcelain)"
+          source_commit="$(git -C .work/source rev-parse HEAD)"
+          echo "commit=$source_commit" >> "$GITHUB_OUTPUT"
+          rm -f "$HOME/.ssh/upstream_read_key"
+
+      - name: Install pinned PlatformIO Core
+        if: steps.select.outputs.tag != ''
+        run: python -m pip install --disable-pip-version-check --no-input "platformio==6.1.19"
+
+      - name: Build all supported firmware variants
+        if: steps.select.outputs.tag != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          for environment in sketch3m_fs5m sketch3m_fs5m_stable sketch1m_fs1m; do
+            pio run --project-dir .work/source --environment "$environment"
+          done
+
+      - name: Create the release allowlist
+        if: steps.select.outputs.tag != ''
+        shell: bash
+        env:
+          FIRMWARE_TAG: ${{ steps.select.outputs.tag }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+          DIST_DIR: ${{ github.workspace }}/dist
+        run: |
+          set -euo pipefail
+          install -d "$DIST_DIR"
+          for environment in sketch3m_fs5m sketch3m_fs5m_stable sketch1m_fs1m; do
+            source_file=".work/source/.pio/build/${environment}/firmware.uf2"
+            test -f "$source_file"
+            install -m 644 "$source_file" "$DIST_DIR/banana-thermal-${FIRMWARE_TAG}-${environment}.uf2"
+          done
+          install -m 644 keys/firmware-release-allowed-signers "$DIST_DIR/firmware-release-allowed-signers"
+          python scripts/make_manifest.py
+          (
+            cd "$DIST_DIR"
+            sha256sum ./*.uf2 ./manifest.json ./firmware-release-allowed-signers > SHA256SUMS
+          )
+
+      - name: Sign release checksums
+        if: steps.select.outputs.tag != ''
+        shell: bash
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_SIGNING_KEY"
+          signing_key="$RUNNER_TEMP/firmware-release-signing"
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$signing_key"
+          chmod 600 "$signing_key"
+          ssh-keygen -Y sign -f "$signing_key" -n file dist/SHA256SUMS
+          rm -f "$signing_key"
+          ssh-keygen -Y verify \
+            -f keys/firmware-release-allowed-signers \
+            -I banana-thermal-firmware \
+            -n file \
+            -s dist/SHA256SUMS.sig < dist/SHA256SUMS
+
+      - name: Reject unexpected release files
+        if: steps.select.outputs.tag != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 7
+          if find dist -maxdepth 1 -type f \
+            ! -name '*.uf2' \
+            ! -name 'manifest.json' \
+            ! -name 'SHA256SUMS' \
+            ! -name 'SHA256SUMS.sig' \
+            ! -name 'firmware-release-allowed-signers' | grep -q .; then
+            echo "Unexpected file in release allowlist." >&2
+            exit 1
+          fi
+
+      - name: Create or resume draft release
+        if: steps.select.outputs.tag != ''
+        shell: bash
+        env:
+          FIRMWARE_TAG: ${{ steps.select.outputs.tag }}
+          RELEASE_STATE: ${{ steps.select.outputs.release_state }}
+        run: |
+          set -euo pipefail
+          {
+            echo "香蕉热成像设备固件 ${FIRMWARE_TAG}"
+            echo
+            echo "请根据设备 Flash 规格选择 UF2，并在刷写前验证 SHA-256 和 Ed25519 签名。"
+            echo "本版本由官方同名 Tag 自动构建并完成完整性签名；Release 不包含设备源码。"
+          } > "$RUNNER_TEMP/release-notes.md"
+
+          if [ "$RELEASE_STATE" = "missing" ]; then
+            gh release create "$FIRMWARE_TAG" \
+              --draft \
+              --target "$GITHUB_SHA" \
+              --title "Banana Thermal Firmware ${FIRMWARE_TAG}" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+
+          gh release upload "$FIRMWARE_TAG" dist/* --clobber
+
+      - name: Verify draft assets and publish
+        if: steps.select.outputs.tag != ''
+        shell: bash
+        env:
+          FIRMWARE_TAG: ${{ steps.select.outputs.tag }}
+        run: |
+          set -euo pipefail
+          expected="$(find dist -maxdepth 1 -type f -printf '%f\n' | sort)"
+          actual="$(gh release view "$FIRMWARE_TAG" --json assets --jq '.assets[].name' | sort)"
+          test "$expected" = "$actual"
+          gh release edit "$FIRMWARE_TAG" --draft=false
+
+      - name: Remove temporary source checkout
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$HOME/.ssh/upstream_read_key"
+          if [ -d .work/source ]; then
+            find .work/source -type f -exec chmod u+w {} +
+            rm -rf .work/source
+          fi

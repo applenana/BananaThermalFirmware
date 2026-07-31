@@ -1,0 +1,7 @@
+.work/
+.local-secrets/
+dist/
+__pycache__/
+*.pyc
+*.key
+*.pem

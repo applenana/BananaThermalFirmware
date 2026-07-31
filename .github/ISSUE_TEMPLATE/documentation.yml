@@ -1,0 +1,23 @@
+name: 文档问题
+description: 报告文档错误、表述不清、失效链接或协议歧义
+title: "[文档] "
+labels:
+  - documentation
+body:
+  - type: input
+    id: page
+    attributes:
+      label: 文档页面
+      placeholder: docs/STREAMING_PROTOCOL.md
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题说明
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 建议修改
