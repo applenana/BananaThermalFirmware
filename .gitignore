@@ -3,6 +3,8 @@
 dist/
 __pycache__/
 *.pyc
+artifacts/manual_work/
+~$*.docx
 *.key
 *.pem
 !keys/build-diagnostics-encryption-cert.pem

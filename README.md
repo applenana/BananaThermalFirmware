@@ -1,87 +1,96 @@
+<div align="center">
+
 # Banana Thermal Firmware
 
-香蕉热成像设备的官方固件下载、升级指南、协议规范与技术支持中心。
+**3.2 寸双光融合热成像：固件发布、完整使用手册与开发资料**
 
-本仓库面向设备用户、售后人员和上位机开发者，提供经过校验的 UF2 固件、版本说明、热成像传感器兼容信息，以及双光串口协议文档。
+[在线使用手册](docs/user-guide/README.md) · [PDF 说明书](artifacts/BananaThermal_3.2寸双光热成像使用说明书_v1.7.pdf) · [Word 说明书](artifacts/BananaThermal_3.2寸双光热成像使用说明书_v1.7.docx) · [下载最新固件](../../releases/latest)
 
-## 快速入口
+![Firmware](https://img.shields.io/badge/firmware-v1.7.0-0B3B60?style=flat-square)
+![Studio](https://img.shields.io/badge/Studio-v0.4.2-E67E22?style=flat-square)
+![Hardware](https://img.shields.io/badge/thermal-MLX%20%7C%20Heimann-2E8B57?style=flat-square)
 
-| 我想要…… | 前往 |
+</div>
+
+> 这是设备用户、售后人员和上位机开发者共用的官方入口。你可以在这里选择并校验 UF2、学习设备的每个按键和菜单、使用 BananaThermal Studio，以及查阅双光协议和数据格式。
+
+![设备按键、接口与传感器示意](docs/assets/user-guide/device-controls.png)
+
+## 从这里开始
+
+| 你的目标 | 最短入口 |
 | --- | --- |
-| 下载最新固件 | [Releases](../../releases/latest) |
-| 第一次升级设备 | [安装与升级指南](docs/INSTALLATION.md) |
-| 了解设备每一项菜单 | [设备菜单完整指南](docs/menu/README.md) |
-| 选择正确的 UF2 | [固件变体说明](docs/FIRMWARE_VARIANTS.md) |
-| 了解 MLX / 海曼和方屏差异 | [传感器与显示模式](docs/SENSORS_AND_DISPLAY.md) |
-| 开发或调试上位机 | [双光串口推流协议](docs/STREAMING_PROTOCOL.md) |
-| 判断固件和上位机是否兼容 | [兼容性说明](docs/COMPATIBILITY.md) |
-| 校验固件真实性 | [发布完整性与签名](docs/RELEASE_INTEGRITY.md) |
-| 设备升级后异常 | [故障排查](docs/TROUBLESHOOTING.md) |
-| 下载官方上位机 | [NextBananaThermalStudio](https://github.com/applenana/NextBananaThermalStudio/releases) |
+| 第一次拿到设备 | [5 分钟快速上手](docs/user-guide/01-device-tour.md#5-分钟快速上手) |
+| 查询 A / B / 拨片 / 快捷键 | [按键与界面行为](docs/user-guide/02-controls-and-display.md) |
+| 查某一个设备菜单 | [16 项菜单完整索引](docs/menu/README.md) |
+| 在 Windows / Android 投屏 | [Studio 安装、连接与实时画面](docs/user-guide/04-studio.md) |
+| 下载、回放或导出照片/录像 | [拍照与图库](docs/user-guide/03-capture-and-gallery.md) |
+| 对齐双光或校准温度 | [高级设置与维护](docs/user-guide/05-advanced-and-service.md) |
+| 升级固件 | [安装与升级指南](docs/INSTALLATION.md) |
+| 排查启动、投屏、融合或测温异常 | [故障排查](docs/TROUBLESHOOTING.md) |
+| 开发上位机或解析文件 | [协议与数据格式](docs/user-guide/06-data-formats.md) |
+| 浏览全部资料 | [文档中心](docs/README.md) |
 
-## 下载哪一个固件
+## 选择正确的固件
 
-每个正式 Release 提供三个 UF2 变体：
+正式 Release 提供三个 UF2。不能根据 UF2 文件大小猜测 Flash 容量；不确定时先查看原固件、硬件资料或联系设备提供方。
 
-| 文件后缀 | 设备配置 | 适用场景 |
+| UF2 文件后缀 | 目标硬件 | 适用场景 |
 | --- | --- | --- |
 | `sketch3m_fs5m.uf2` | 8 MB Flash，300 MHz | 默认正常版；性能优先 |
-| `sketch3m_fs5m_stable.uf2` | 8 MB Flash，220 MHz | 稳定版；摄像头竖纹或高频运行不稳定时使用 |
+| `sketch3m_fs5m_stable.uf2` | 8 MB Flash，220 MHz | 摄像头竖纹、随机重启或高频运行不稳定时测试 |
 | `sketch1m_fs1m.uf2` | 2 MB Flash | 旧款或小容量 Flash 设备 |
 
-无法确认 Flash 容量时不要凭文件大小猜测。请先查看设备资料、原固件说明或联系设备提供方。更详细的选择方法见[固件变体说明](docs/FIRMWARE_VARIANTS.md)。
+完整选择规则见[固件变体说明](docs/FIRMWARE_VARIANTS.md)。
 
-## 安全升级摘要
+## 安全升级，7 步完成
 
-1. 备份设备照片、标定参数和重要配置；
-2. 下载与硬件匹配的 UF2；
-3. 按 Release 中的 SHA-256 和 Ed25519 签名校验文件；
-4. 进入 UF2 Bootloader 后复制固件；
-5. 等待设备自动重启；
-6. 验证版本、传感器识别、全屏/方屏、热像和可见光；
-7. 使用最新版 NextBananaThermalStudio 做投屏兼容检查。
+1. 下载设备照片，记录发射率、温度校准、触摸校准、双光对齐和视差锚点。
+2. 从正式 [Releases](../../releases/latest) 下载与 Flash 容量匹配的 UF2。
+3. 使用 `SHA256SUMS` 和 Ed25519 签名确认文件完整、来源可信。
+4. 断开 USB；按住按钮 A，按一下复位，先松复位，出现 RP2040 磁盘后再松开 A。
+5. 把 UF2 复制到 RP2040 磁盘，等待磁盘自动断开和设备重启。
+6. 检查传感器、全屏/方屏、热像、可见光、融合与拍照。
+7. 用最新版 [NextBananaThermalStudio](https://github.com/applenana/NextBananaThermalStudio/releases) 检查连接、投屏和校准参数。
 
-刷入错误变体可能导致设备无法启动、文件系统容量不匹配或原有数据不可用。完整步骤见[安装与升级指南](docs/INSTALLATION.md)。
+刷入错误的 Flash 分区可能导致无法启动、LittleFS 不匹配或旧数据不可读。请在操作前阅读[完整升级指南](docs/INSTALLATION.md)。
 
-## 发布可信度
+## 这套设备包含什么
 
-正式 Release 由自动化构建产生，并包含：
+| 层级 | 能力 |
+| --- | --- |
+| 设备固件 | 32×24 / 32×32 热阵列、可见光摄像头、双光融合、测温光标、触屏/实体键、拍照与设备相册 |
+| 可选硬件 | MLX90640 / MLX90641 / Heimann HTPA32x32、OV2640 / OV3660、VL53L0X 测距 |
+| BananaThermal Studio | Windows / Android 实时双路投屏、测温趋势、设备图库、`.btpkg` 图库、视频导出、校准与更新 |
+| 开发接口 | Thermal View JSON v2、热像/可见光串口帧、设备照片下载、校准协议与公开文件格式 |
+
+不同硬件会自动隐藏不适用的菜单。方屏和全屏使用独立的对齐参数；LCD 的 320×240 / 240×240 显示分辨率不等于热阵列真实测温点数。详见[传感器与显示模式](docs/SENSORS_AND_DISPLAY.md)。
+
+## 发布为什么可信
+
+正式 Release 由自动化流程构建，只允许以下附件进入发布：
 
 - 三个允许发布的 UF2；
 - `manifest.json`；
-- `SHA256SUMS`；
-- `SHA256SUMS.sig`；
+- `SHA256SUMS` 与 `SHA256SUMS.sig`；
 - `firmware-release-allowed-signers`。
 
-发布过程只允许上述文件进入 Release。正式版本启用不可变发布保护，发布后不能替换附件。校验方法见[发布完整性与签名](docs/RELEASE_INTEGRITY.md)。
+正式版本启用不可变发布保护，附件发布后不可替换。验证方法见[发布完整性与签名](docs/RELEASE_INTEGRITY.md)。
 
-## 文档目录
+## 文档地图
 
-- [设备菜单完整指南](docs/menu/README.md)
-- [安装与升级指南](docs/INSTALLATION.md)
-- [固件变体说明](docs/FIRMWARE_VARIANTS.md)
-- [传感器与显示模式](docs/SENSORS_AND_DISPLAY.md)
-- [双光串口推流协议](docs/STREAMING_PROTOCOL.md)
-- [兼容性说明](docs/COMPATIBILITY.md)
-- [发布与版本策略](docs/RELEASE_PROCESS.md)
-- [发布完整性与签名](docs/RELEASE_INTEGRITY.md)
-- [故障排查](docs/TROUBLESHOOTING.md)
-- [参与文档和问题反馈](CONTRIBUTING.md)
-- [安全问题报告](SECURITY.md)
+| 读者 | 推荐路径 |
+| --- | --- |
+| 设备用户 | [在线使用手册](docs/user-guide/README.md) → [菜单索引](docs/menu/README.md) → [故障排查](docs/TROUBLESHOOTING.md) |
+| 售后 / 维护 | [高级设置与维护](docs/user-guide/05-advanced-and-service.md) → [兼容性](docs/COMPATIBILITY.md) → [版本说明](docs/releases/v1.7.0.md) |
+| 上位机开发者 | [协议与数据格式](docs/user-guide/06-data-formats.md) → [串口推流协议](docs/STREAMING_PROTOCOL.md) → [传感器与显示模式](docs/SENSORS_AND_DISPLAY.md) |
+| 发布维护者 | [发布与版本策略](docs/RELEASE_PROCESS.md) → [发布完整性](docs/RELEASE_INTEGRITY.md) → [贡献指南](CONTRIBUTING.md) |
 
-## 问题反馈
+## 获取帮助
 
-提交问题前请准备：
+提交 Issue 前请准备设备型号、Flash 容量、固件完整版本、UF2 变体、传感器/摄像头型号、全屏或方屏模式、Studio 版本、操作系统和最短复现步骤。日志和截图必须移除序列号、激活码、密钥等敏感信息。
 
-- 设备型号和 Flash 容量；
-- 固件版本与所选变体；
-- 传感器型号；
-- 全屏还是方屏；
-- 是否启用可见光或融合；
-- 上位机名称、版本和操作系统；
-- 可复现步骤及已经移除序列号等敏感信息的日志。
-
-普通使用问题可以提交 Issue。涉及密钥、激活机制、未公开实现或可利用漏洞时，请按 [SECURITY.md](SECURITY.md) 私下报告。
+普通使用问题可提交 Issue。涉及密钥、激活机制、未公开实现或可利用漏洞时，请按 [SECURITY.md](SECURITY.md) 私下报告。
 
 ## 许可说明
 
