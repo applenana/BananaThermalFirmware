@@ -118,11 +118,25 @@ def main() -> None:
     public_repository = os.environ["GITHUB_REPOSITORY"]
     token = os.environ["GITHUB_TOKEN"]
     requested_tag = os.environ.get("REQUESTED_TAG", "").strip()
+    minimum_tag = os.environ.get("MINIMUM_FIRMWARE_TAG", "v1.7.0").strip()
 
-    tags = git_tags(upstream_repository)
+    if not TAG_PATTERN.fullmatch(minimum_tag):
+        fail("MINIMUM_FIRMWARE_TAG must use the form vMAJOR.MINOR.PATCH")
+
+    minimum_version = version_key(minimum_tag)
+    tags = [
+        tag
+        for tag in git_tags(upstream_repository)
+        if version_key(tag) >= minimum_version
+    ]
     if requested_tag:
         if not TAG_PATTERN.fullmatch(requested_tag):
             fail("manual tag must use the form vMAJOR.MINOR.PATCH")
+        if version_key(requested_tag) < minimum_version:
+            fail(
+                f"manual tag is older than the minimum published version "
+                f"({minimum_tag})"
+            )
         if requested_tag not in tags:
             fail("manual tag does not exist in the official upstream repository")
         candidates = [requested_tag]

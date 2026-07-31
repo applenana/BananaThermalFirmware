@@ -15,26 +15,29 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  sync:
-    name: Check, build and publish one missing tag
+  build:
+    name: Build one missing official tag
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: firmware-release
+    environment: firmware-build
+    outputs:
+      tag: ${{ steps.select.outputs.tag }}
+      release_state: ${{ steps.select.outputs.release_state }}
     env:
       UPSTREAM_REPOSITORY: ${{ vars.UPSTREAM_REPOSITORY }}
-      GITHUB_TOKEN: ${{ github.token }}
+      MINIMUM_FIRMWARE_TAG: ${{ vars.MINIMUM_FIRMWARE_TAG || 'v1.7.0' }}
       REQUESTED_TAG: ${{ inputs.tag || '' }}
 
     steps:
-      - name: Check out public release configuration
+      - name: Check out release configuration
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Configure authenticated read-only source transport
+      - name: Configure authenticated source transport
         shell: bash
         env:
           UPSTREAM_READ_KEY: ${{ secrets.UPSTREAM_READ_KEY }}
@@ -54,6 +57,8 @@ jobs:
 
       - name: Select one unpublished official tag
         id: select
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/select_release.py
 
       - name: Fetch the exact tagged source
@@ -81,13 +86,24 @@ jobs:
       - name: Build all supported firmware variants
         if: steps.select.outputs.tag != ''
         shell: bash
+        env:
+          FIRMWARE_VERSION: ${{ steps.select.outputs.tag }}
         run: |
           set -euo pipefail
           for environment in sketch3m_fs5m sketch3m_fs5m_stable sketch1m_fs1m; do
-            pio run --project-dir .work/source --environment "$environment"
+            build_log="$RUNNER_TEMP/platformio-${environment}.log"
+            if ! pio run \
+              --project-dir .work/source \
+              --environment "$environment" \
+              >"$build_log" 2>&1; then
+              echo "::error::Firmware build failed for ${environment}. Detailed compiler output is intentionally withheld from this public log."
+              exit 1
+            fi
+            rm -f "$build_log"
+            echo "Built ${environment}."
           done
 
-      - name: Create the release allowlist
+      - name: Create the unsigned release allowlist
         if: steps.select.outputs.tag != ''
         shell: bash
         env:
@@ -100,6 +116,7 @@ jobs:
           for environment in sketch3m_fs5m sketch3m_fs5m_stable sketch1m_fs1m; do
             source_file=".work/source/.pio/build/${environment}/firmware.uf2"
             test -f "$source_file"
+            grep -aFq "HEIMAN-NSP-${FIRMWARE_TAG}-32" "$source_file"
             install -m 644 "$source_file" "$DIST_DIR/banana-thermal-${FIRMWARE_TAG}-${environment}.uf2"
           done
           install -m 644 keys/firmware-release-allowed-signers "$DIST_DIR/firmware-release-allowed-signers"
@@ -108,9 +125,68 @@ jobs:
             cd "$DIST_DIR"
             sha256sum ./*.uf2 ./manifest.json ./firmware-release-allowed-signers > SHA256SUMS
           )
+          python scripts/verify_release_package.py \
+            --dist "$DIST_DIR" \
+            --tag "$FIRMWARE_TAG" \
+            --unsigned
 
-      - name: Sign release checksums
+      - name: Transfer the unsigned release package
         if: steps.select.outputs.tag != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: firmware-release-${{ steps.select.outputs.tag }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Remove temporary source and credentials
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$HOME/.ssh/upstream_read_key"
+          if [ -d .work/source ]; then
+            find .work/source -type f -exec chmod u+w {} +
+            rm -rf .work/source
+          fi
+
+  publish:
+    name: Verify, sign and publish
+    if: needs.build.outputs.tag != ''
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: firmware-release
+    permissions:
+      contents: write
+    env:
+      FIRMWARE_TAG: ${{ needs.build.outputs.tag }}
+      RELEASE_STATE: ${{ needs.build.outputs.release_state }}
+
+    steps:
+      - name: Check out release configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Receive the unsigned release package
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: firmware-release-${{ needs.build.outputs.tag }}
+          path: dist
+
+      - name: Verify the unsigned release allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp keys/firmware-release-allowed-signers dist/firmware-release-allowed-signers
+          python scripts/verify_release_package.py \
+            --dist dist \
+            --tag "$FIRMWARE_TAG" \
+            --unsigned
+
+      - name: Sign and verify release checksums
         shell: bash
         env:
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
@@ -118,46 +194,36 @@ jobs:
           set -euo pipefail
           test -n "$RELEASE_SIGNING_KEY"
           signing_key="$RUNNER_TEMP/firmware-release-signing"
+          trap 'rm -f "$signing_key"' EXIT
           printf '%s\n' "$RELEASE_SIGNING_KEY" > "$signing_key"
           chmod 600 "$signing_key"
           ssh-keygen -Y sign -f "$signing_key" -n file dist/SHA256SUMS
-          rm -f "$signing_key"
           ssh-keygen -Y verify \
             -f keys/firmware-release-allowed-signers \
             -I banana-thermal-firmware \
             -n file \
             -s dist/SHA256SUMS.sig < dist/SHA256SUMS
-
-      - name: Reject unexpected release files
-        if: steps.select.outputs.tag != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 7
-          if find dist -maxdepth 1 -type f \
-            ! -name '*.uf2' \
-            ! -name 'manifest.json' \
-            ! -name 'SHA256SUMS' \
-            ! -name 'SHA256SUMS.sig' \
-            ! -name 'firmware-release-allowed-signers' | grep -q .; then
-            echo "Unexpected file in release allowlist." >&2
-            exit 1
-          fi
+          python scripts/verify_release_package.py \
+            --dist dist \
+            --tag "$FIRMWARE_TAG"
 
       - name: Create or resume draft release
-        if: steps.select.outputs.tag != ''
         shell: bash
         env:
-          FIRMWARE_TAG: ${{ steps.select.outputs.tag }}
-          RELEASE_STATE: ${{ steps.select.outputs.release_state }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          {
-            echo "香蕉热成像设备固件 ${FIRMWARE_TAG}"
-            echo
-            echo "请根据设备 Flash 规格选择 UF2，并在刷写前验证 SHA-256 和 Ed25519 签名。"
-            echo "本版本由官方同名 Tag 自动构建并完成完整性签名；Release 不包含设备源码。"
-          } > "$RUNNER_TEMP/release-notes.md"
+          release_notes="docs/releases/${FIRMWARE_TAG}.md"
+          if [ -f "$release_notes" ]; then
+            cp "$release_notes" "$RUNNER_TEMP/release-notes.md"
+          else
+            {
+              echo "香蕉热成像设备固件 ${FIRMWARE_TAG}"
+              echo
+              echo "请根据设备 Flash 规格选择 UF2，并在刷写前验证 SHA-256 与 Ed25519 签名。"
+              echo "本版本由官方同名 Tag 自动构建并完成完整性签名；Release 不包含设备源码。"
+            } > "$RUNNER_TEMP/release-notes.md"
+          fi
 
           if [ "$RELEASE_STATE" = "missing" ]; then
             gh release create "$FIRMWARE_TAG" \
@@ -170,24 +236,12 @@ jobs:
           gh release upload "$FIRMWARE_TAG" dist/* --clobber
 
       - name: Verify draft assets and publish
-        if: steps.select.outputs.tag != ''
         shell: bash
         env:
-          FIRMWARE_TAG: ${{ steps.select.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           expected="$(find dist -maxdepth 1 -type f -printf '%f\n' | sort)"
           actual="$(gh release view "$FIRMWARE_TAG" --json assets --jq '.assets[].name' | sort)"
           test "$expected" = "$actual"
           gh release edit "$FIRMWARE_TAG" --draft=false
-
-      - name: Remove temporary source checkout
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -f "$HOME/.ssh/upstream_read_key"
-          if [ -d .work/source ]; then
-            find .work/source -type f -exec chmod u+w {} +
-            rm -rf .work/source
-          fi

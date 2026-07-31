@@ -10,6 +10,7 @@
 | --- | --- |
 | 下载最新固件 | [Releases](../../releases/latest) |
 | 第一次升级设备 | [安装与升级指南](docs/INSTALLATION.md) |
+| 了解设备每一项菜单 | [设备菜单完整指南](docs/menu/README.md) |
 | 选择正确的 UF2 | [固件变体说明](docs/FIRMWARE_VARIANTS.md) |
 | 了解 MLX / 海曼和方屏差异 | [传感器与显示模式](docs/SENSORS_AND_DISPLAY.md) |
 | 开发或调试上位机 | [双光串口推流协议](docs/STREAMING_PROTOCOL.md) |
@@ -84,6 +85,7 @@ MLX90640 / MLX90641 的物理阵列只有 `32 × 24`。设备进入方屏时不�
 
 ## 文档目录
 
+- [设备菜单完整指南](docs/menu/README.md)
 - [安装与升级指南](docs/INSTALLATION.md)
 - [固件变体说明](docs/FIRMWARE_VARIANTS.md)
 - [传感器与显示模式](docs/SENSORS_AND_DISPLAY.md)
