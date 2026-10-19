@@ -33,19 +33,20 @@
 
 ## 选择正确的固件
 
-正式 Release 提供三个 UF2。不能根据 UF2 文件大小猜测 Flash 容量；不确定时先查看原固件、硬件资料或联系设备提供方。
+从 v1.8.0 开始，正式 Release 提供 dual 与 standard 两套板型、每套三个 UF2。不能根据 UF2 文件大小猜测板型或 Flash 容量。
 
 | UF2 文件后缀 | 目标硬件 | 适用场景 |
 | --- | --- | --- |
-| `sketch3m_fs5m.uf2` | 8 MB Flash，300 MHz | 默认正常版；性能优先 |
-| `sketch3m_fs5m_stable.uf2` | 8 MB Flash，220 MHz | 摄像头竖纹、随机重启或高频运行不稳定时测试 |
-| `sketch1m_fs1m.uf2` | 2 MB Flash | 旧款或小容量 Flash 设备 |
+| `dual_sketch3m_fs5m*.uf2` | 双光，8 MB | 300 MHz 性能版或 220 MHz 稳定版 |
+| `dual_sketch1m_fs1m.uf2` | 双光，2 MB | 小容量 Flash |
+| `standard_sketch3m_fs5m*.uf2` | 普通热成像，8 MB | 300 MHz 性能版或 220 MHz 稳定版 |
+| `standard_sketch1m_fs1m.uf2` | 普通热成像，2 MB | 小容量 Flash |
 
 完整选择规则见[固件变体说明](docs/FIRMWARE_VARIANTS.md)。
 
 ## 安全升级，7 步完成
 
-1. 下载设备照片，记录发射率、温度校准、触摸校准、双光对齐和视差锚点。
+1. 下载设备照片，记录发射率、温度校准、触摸校准；双光设备另记录对齐和视差锚点。
 2. 从正式 [Releases](../../releases/latest) 下载与 Flash 容量匹配的 UF2。
 3. 使用 `SHA256SUMS` 和 Ed25519 签名确认文件完整、来源可信。
 4. 断开 USB；按住按钮 A，按一下复位，先松复位，出现 RP2040 磁盘后再松开 A。
@@ -70,7 +71,7 @@
 
 正式 Release 由自动化流程构建，只允许以下附件进入发布：
 
-- 三个允许发布的 UF2；
+- v1.8.0 起六个允许发布的 UF2（历史 Release 保持三个）；
 - `manifest.json`；
 - `SHA256SUMS` 与 `SHA256SUMS.sig`；
 - `firmware-release-allowed-signers`。

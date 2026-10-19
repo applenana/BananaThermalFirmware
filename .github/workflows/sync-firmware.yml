@@ -95,7 +95,9 @@ jobs:
           FIRMWARE_VERSION: ${{ steps.select.outputs.tag }}
         run: |
           set -euo pipefail
-          for environment in sketch3m_fs5m sketch3m_fs5m_stable sketch1m_fs1m; do
+          mapfile -t environments < <(python scripts/release_matrix.py --tag "$FIRMWARE_VERSION" --environments)
+          test "${#environments[@]}" -gt 0
+          for environment in "${environments[@]}"; do
             build_log="$RUNNER_TEMP/platformio-${environment}.log"
             if ! pio run \
               --project-dir .work/source \
@@ -152,10 +154,25 @@ jobs:
         run: |
           set -euo pipefail
           install -d "$DIST_DIR"
-          for environment in sketch3m_fs5m sketch3m_fs5m_stable sketch1m_fs1m; do
+          mapfile -t environments < <(python scripts/release_matrix.py --tag "$FIRMWARE_TAG" --environments)
+          for environment in "${environments[@]}"; do
             source_file=".work/source/.pio/build/${environment}/firmware.uf2"
+            identity_file=".work/source/.pio/build/${environment}/firmware.bin"
             test -f "$source_file"
-            grep -aFq "HEIMAN-NSP-${FIRMWARE_TAG}-32" "$source_file"
+            test -f "$identity_file"
+            case "$environment" in
+              dual_*)
+                grep -aFq "HEIMAN-NSP-${FIRMWARE_TAG}-32" "$identity_file"
+                grep -aFq "BANANA-THERMAL:dual:${environment}" "$identity_file"
+                ;;
+              standard_*)
+                grep -aFq "HEIMAN-NSP-STANDARD-${FIRMWARE_TAG}-32" "$identity_file"
+                grep -aFq "BANANA-THERMAL:standard:${environment}" "$identity_file"
+                ;;
+              *)
+                grep -aFq "HEIMAN-NSP-${FIRMWARE_TAG}-32" "$identity_file"
+                ;;
+            esac
             install -m 644 "$source_file" "$DIST_DIR/banana-thermal-${FIRMWARE_TAG}-${environment}.uf2"
           done
           install -m 644 keys/firmware-release-allowed-signers "$DIST_DIR/firmware-release-allowed-signers"
@@ -259,7 +276,8 @@ jobs:
             {
               echo "香蕉热成像设备固件 ${FIRMWARE_TAG}"
               echo
-              echo "请根据设备 Flash 规格选择 UF2，并在刷写前验证 SHA-256 与 Ed25519 签名。"
+              echo "请使用最新版 NextBananaThermalStudio，并根据 dual / standard 板型和 Flash 规格选择 UF2。"
+              echo "普通热成像首次迁移会格式化 LittleFS；请先备份照片、配置和校准。跨 2 MB / 8 MB 分区可能需要重新激活。"
               echo "本版本由官方同名 Tag 自动构建并完成完整性签名；Release 不包含设备源码。"
             } > "$RUNNER_TEMP/release-notes.md"
           fi

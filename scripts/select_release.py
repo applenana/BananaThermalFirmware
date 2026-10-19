@@ -5,20 +5,17 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
+try:
+    from release_matrix import TAG_PATTERN, expected_assets, version_key
+except ModuleNotFoundError:  # Loaded as scripts.select_release by unit tests.
+    from scripts.release_matrix import TAG_PATTERN, expected_assets, version_key
 
-TAG_PATTERN = re.compile(r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
-ENVIRONMENTS = (
-    "sketch3m_fs5m",
-    "sketch3m_fs5m_stable",
-    "sketch1m_fs1m",
-)
 
 
 def fail(message: str) -> "NoReturn":
@@ -48,23 +45,6 @@ def git_tags(upstream_repository: str) -> list[str]:
     return sorted(set(tags), key=version_key)
 
 
-def version_key(tag: str) -> tuple[int, int, int]:
-    match = TAG_PATTERN.fullmatch(tag)
-    if not match:
-        fail(f"unsupported tag format: {tag}")
-    return tuple(int(part) for part in match.groups())
-
-
-def expected_assets(tag: str) -> set[str]:
-    return {
-        *(f"banana-thermal-{tag}-{environment}.uf2" for environment in ENVIRONMENTS),
-        "manifest.json",
-        "SHA256SUMS",
-        "SHA256SUMS.sig",
-        "firmware-release-allowed-signers",
-    }
-
-
 def get_release(repository: str, tag: str, token: str) -> dict | None:
     encoded_tag = urllib.parse.quote(tag, safe="")
     request = urllib.request.Request(
@@ -91,16 +71,18 @@ def release_state(repository: str, tag: str, token: str) -> str:
         return "missing"
 
     actual = {asset["name"] for asset in release.get("assets", [])}
-    complete = expected_assets(tag) <= actual
+    expected = expected_assets(tag)
+    complete = expected == actual
     if release.get("draft"):
         return "draft"
     if release.get("prerelease"):
         fail(f"{tag} already exists as a prerelease; manual review required")
     if not complete:
-        missing = sorted(expected_assets(tag) - actual)
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
         fail(
             f"{tag} is already public but incomplete; refusing to mutate it. "
-            f"Missing assets: {', '.join(missing)}"
+            f"Missing assets: {', '.join(missing)}; extra assets: {', '.join(extra)}"
         )
     return "published"
 

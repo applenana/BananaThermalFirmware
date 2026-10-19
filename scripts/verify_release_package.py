@@ -9,12 +9,11 @@ import json
 import re
 from pathlib import Path
 
+try:
+    from release_matrix import release_contract
+except ModuleNotFoundError:
+    from scripts.release_matrix import release_contract
 
-ENVIRONMENTS = (
-    "sketch3m_fs5m",
-    "sketch3m_fs5m_stable",
-    "sketch1m_fs1m",
-)
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -51,9 +50,12 @@ def main() -> None:
     args = parser.parse_args()
 
     dist = args.dist.resolve()
+    contract = release_contract(args.tag)
+    variants = contract["variants"]
+    environments = tuple(item["platformio_environment"] for item in variants)
     firmware_files = {
         f"banana-thermal-{args.tag}-{environment}.uf2"
-        for environment in ENVIRONMENTS
+        for environment in environments
     }
     checksum_files = {
         *firmware_files,
@@ -89,7 +91,7 @@ def main() -> None:
             fail(f"SHA-256 mismatch: {filename}")
 
     manifest = json.loads((dist / "manifest.json").read_text(encoding="utf-8"))
-    if manifest.get("schema_version") != 1:
+    if manifest.get("schema_version") != contract["schema_version"]:
         fail("unsupported manifest schema")
     if manifest.get("firmware_tag") != args.tag:
         fail("manifest firmware tag mismatch")
@@ -97,16 +99,19 @@ def main() -> None:
         fail("invalid source revision digest")
 
     artifacts = manifest.get("artifacts")
-    if not isinstance(artifacts, list) or len(artifacts) != len(ENVIRONMENTS):
-        fail("manifest must contain exactly three firmware artifacts")
+    if not isinstance(artifacts, list) or len(artifacts) != len(environments):
+        fail("manifest firmware artifact count mismatch")
     by_environment = {
         artifact.get("platformio_environment"): artifact
         for artifact in artifacts
         if isinstance(artifact, dict)
     }
-    if set(by_environment) != set(ENVIRONMENTS):
+    if len(by_environment) != len(artifacts) or set(by_environment) != set(environments):
         fail("manifest environment set mismatch")
-    for environment in ENVIRONMENTS:
+    variants_by_environment = {
+        item["platformio_environment"]: item for item in variants
+    }
+    for environment in environments:
         artifact = by_environment[environment]
         filename = f"banana-thermal-{args.tag}-{environment}.uf2"
         path = dist / filename
@@ -116,6 +121,11 @@ def main() -> None:
             fail(f"manifest size mismatch: {filename}")
         if artifact.get("sha256") != sha256(path):
             fail(f"manifest SHA-256 mismatch: {filename}")
+        if contract["schema_version"] == 2:
+            expected_metadata = variants_by_environment[environment]
+            for key, value in expected_metadata.items():
+                if artifact.get(key) != value:
+                    fail(f"manifest metadata mismatch: {environment}.{key}")
 
     builder = manifest.get("builder")
     if not isinstance(builder, dict) or builder.get("platformio_core") != "6.1.19":
