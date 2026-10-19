@@ -1,5 +1,7 @@
 # 协议与数据格式
 
+适用于单光和双光。standard 只传热像，dual 另可提供可见光；先用 GetSysInfo 识别板型与能力，再用 thermal view 获取当前视图。MLX90641 原生 16×12，由固件上采样到 32×24 传输，不能把协议温度数量当成物理像素数量。
+
 [上一章：高级设置](05-advanced-and-service.md) · [在线手册首页](README.md) · [完整串口协议](../STREAMING_PROTOCOL.md)
 
 这一章说明“设备如何传、Studio 如何存、导出后还能做什么”。实现上位机时，应先读取 `thermal view`，再依据字段和实际帧长度解析，不能按 LCD 分辨率猜温度点数。

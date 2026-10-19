@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Build the Banana Thermal end-user manual as a deterministic DOCX.
+"""Historical v1.7 dual-light manual builder.
+
+Current single-light and dual-light manuals use scripts/build_manuals.py.
+Keep this builder only to reproduce the archived v1.7 documentation.
 
 The document follows the compact_reference_guide preset from the bundled
 documents skill: US Letter, 1 inch margins, 11 pt body, 1.25 line spacing,

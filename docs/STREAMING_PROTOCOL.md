@@ -1,6 +1,14 @@
-# 双光串口推流协议
+# 单光与双光串口推流协议
 
 协议运行在 USB CDC 字节流上。热成像帧、可见光帧和以换行结尾的 JSON 文本可以交织出现，上位机解析器必须按 magic 分帧。
+
+standard 单光只提供热流，dual 另可提供可见光；不要向单光持续请求 vstream。先用 `GetSysInfo` 识别板型和能力，再用 `thermal view` 获取几何上下文。
+
+## 设备身份与能力
+
+新版 `GetSysInfo` 包含 `firmwareVersion`、`deviceModel`、`hardwareProfile`、`firmwareVariant`、`flashSizeBytes`、`cpuFrequencyHz` 与 `capabilities`。标准单光返回 `hardwareProfile=standard`、`deviceModel=HEIMAN-NSP-STANDARD`，其 `capabilities.camera`、`capabilities.distance` 和 `capabilities.key2` 均为 false。双光返回 dual，其编译能力不代表可选模块实际初始化成功。
+
+只提取排障需要的字段，不把完整回显中的序列号和激活信息直接发布。旧单光可能没有这些新字段，应由新版 Studio 的历史身份识别和迁移流程处理。Thermal View 的 visible_width/height 是几何字段，不能据此推断存在摄像头。
 
 全部整数和 float 均为 little-endian。float 使用 IEEE 754 float32。
 
@@ -73,6 +81,8 @@
 
 ## 可见光帧
 
+本节只适用于支持摄像头的双光设备。单光的温度数组与热流外壳仍遵循前面的规则。
+
 ```text
 "VBEG"
 + width  : uint32 LE
@@ -118,3 +128,15 @@ pixel_index = row × width + column
 - 可见光只接受协议约定的 `120 × 160` 或 `120 × 120`；
 - `length` 必须等于 `width × height × 2`；
 - 未协商状态下只接受传统 768 点热帧。
+
+## 温度校准协议
+
+兼容单直线接口为 `calibration get`、`calibration set <gain> <offset>` 与 `calibration reset`。gain 限制 0.5 至 1.5，offset 限制 -100 至 100 °C；以响应和回读确认是否持久化。
+
+新固件还提供 `calibration2 get/begin/chunk/commit/abort/reset`，用事务、分块数据和 CRC 管理最多 128 段的连续曲线。客户端需先协商能力，旧 `calibration get` 不能替代完整曲线读取。推荐由新版 Studio 完成曲线传输，详细用户操作见[温度校准](menu/04-temperature-calibration.md)。
+
+## 温度报警与其他记录
+
+报警事件以 `!A,1,H,1,+0850` 加 LF 等 ASCII 行发送，与图像和图库记录交织。二进制帧内部按长度读取，不能在载荷中搜索文本魔数；记录边界处独立处理报警行。单光与双光使用相同事件规则。
+
+配置入口为 `alarm get/set/ack/defaults`。状态判断、迟滞、确认与断连语义见[温度报警](menu/17-temperature-alarm.md)，精确配置字段和测试向量见 [Studio 报警协议](https://github.com/applenana/NextBananaThermalStudio/blob/main/docs/protocol_temperature_alarm.md)。

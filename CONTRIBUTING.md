@@ -23,6 +23,8 @@
 
 ```text
 设备/硬件批次：
+单光/双光与屏幕尺寸：
+hardwareProfile（standard/dual）：
 Flash 容量：
 固件版本与变体：
 热像传感器：
@@ -41,6 +43,8 @@ thermal view 响应（已脱敏）：
 
 - 使用简体中文和 UTF-8；
 - 区分设备显示尺寸、可见光流尺寸与热流尺寸；
+- 区分三款单光外壳的实体操作与 standard/dual 两种固件板型，不根据尺寸猜 Flash；
+- 修改当前说明书时同步 Markdown、DOCX 和 PDF，按[维护说明](docs/DOCUMENTATION_MAINTENANCE.md)重建并逐页检查；
 - 不把 MLX 方屏描述为真实 `32 × 32` 传感器数据；
 - 协议数字明确字节序和单位；
 - 不提交固件二进制、源码镜像、密钥或构建目录。

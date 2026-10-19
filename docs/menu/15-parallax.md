@@ -1,6 +1,6 @@
 # 视差调整
 
-上一篇：[传感器设置](14-sensor.md) · [返回菜单总览](README.md) · 下一篇：[距离传感器](16-distance-sensor.md)
+上一篇：[温度报警](17-temperature-alarm.md) · [返回菜单总览](README.md) · 下一篇：[距离传感器](16-distance-sensor.md)
 
 > 本栏目只在 VL53L0X 距离传感器初始化成功后显示。
 
