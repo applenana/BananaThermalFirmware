@@ -9,6 +9,9 @@
 | 2.4 / 2.8 / 3.2 寸单光 | [完整单光使用说明书](user-guide/single-light.md) |
 | 3.2 寸双光融合 | [完整双光使用说明书](user-guide/dual-light.md) |
 | Word 与 PDF | [离线手册及历史版本](../artifacts/README.md) |
+| 双光随附装订说明书 | [A5 / A6 / A7 36 面视差图解版](../artifacts/print-booklets/dual/README.md)，保留 32 面与 28 面版本 |
+| 单光印厂合版原稿 | [三款机型 A6 / A7 单页顺序 Word](../artifacts/print-booklets/reading-order/README.md) |
+| 单光 A7 直接拼版印刷 | [28 面仅封面装订虚线版](../artifacts/print-booklets/a7/README.md) |
 | 板型与功能差异 | [设备对照](devices/README.md) |
 | 文档来源与重建 | [维护说明](DOCUMENTATION_MAINTENANCE.md) |
 

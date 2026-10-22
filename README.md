@@ -38,6 +38,19 @@
 | 开发上位机或解析文件 | [协议与数据格式](docs/user-guide/06-data-formats.md) |
 | 浏览全部资料 | [文档中心](docs/README.md) |
 
+## 随设备装订的说明书
+
+印刷稿按单台设备的使用任务编排，包含硬件识别、日常操作、参数解释、维护与资料支持。与上方电子版分别维护，按用途选择：
+
+| 设备与用途 | 文件入口 | 成册规格 |
+| --- | --- | --- |
+| 3.2 寸双光，A4 直接拼版印刷 | [A5 / A6 / A7 视差图解版](artifacts/print-booklets/dual/README.md) | 当前各 36 面；保留 32 面详解版与 28 面初版 |
+| 三款单光，交给印厂合版 | [A6 / A7 单页顺序 Word 原稿](artifacts/print-booklets/reading-order/README.md) | A6 32 面、A7 28 面，每款独立成册 |
+| 三款单光，A7 四套预拼版 | [仅封面装订虚线版](artifacts/print-booklets/a7/README.md) | 每本 28 面，每组 7 张双面 A4 制作四本 |
+| 三款单光，其他尺寸与历史拼版 | [A5](artifacts/print-booklets/README.md) / [A6](artifacts/print-booklets/a6/README.md) | 每本 32 面，按各目录说明打印 |
+
+“面”指折订后的一面成品页，含封面、内封与封底。预拼版文件使用 A4、实际大小 100%、普通每张一页输出；单页原稿由印厂或小册子工具安排页序。各目录提供纸张方向、双面翻转与裁切位置，先以最终纸张制作校样。
+
 ## 选择正确的固件
 
 从 v1.8.0 开始，正式 Release 提供 dual 与 standard 两套板型、每套三个 UF2。不能根据 UF2 文件大小猜测板型或 Flash 容量。
@@ -96,6 +109,8 @@
 | 发布维护者 | [发布与版本策略](docs/RELEASE_PROCESS.md) → [发布完整性](docs/RELEASE_INTEGRITY.md) → [贡献指南](CONTRIBUTING.md) |
 
 ## 获取帮助
+
+更多使用资料与交流可加入 QQ 群 **1002979587**，也可使用[群二维码](docs/assets/manual-design/qq-group-1002979587.jpg)。项目入口：[NextBananaThermalStudio 上位机](https://github.com/applenana/NextBananaThermalStudio)、[Python 上位机](https://github.com/applenana/BananaThermal-Studio)、[在线文档与固件](https://github.com/applenana/BananaThermalFirmware)。
 
 提交 Issue 前请准备设备型号、Flash 容量、固件完整版本、UF2 变体、传感器/摄像头型号、全屏或方屏模式、Studio 版本、操作系统和最短复现步骤。日志和截图必须移除序列号、激活码、密钥等敏感信息。
 
