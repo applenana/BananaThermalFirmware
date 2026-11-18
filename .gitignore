@@ -8,3 +8,5 @@ artifacts/manual_work/
 *.key
 *.pem
 !keys/build-diagnostics-encryption-cert.pem
+!keys/starthermal-diagnostics-cert.pem
+dist-starthermal/

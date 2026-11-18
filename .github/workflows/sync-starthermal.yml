@@ -1,0 +1,171 @@
+name: Publish StarThermal firmware
+
+on:
+  schedule:
+    - cron: "37 * * * *"
+  workflow_dispatch:
+    inputs:
+      check_only:
+        description: "Check private tags and release state without building"
+        type: boolean
+        default: true
+      tag:
+        description: "Optional source tag (vMAJOR.MINOR.PATCH)"
+        type: string
+        required: false
+
+concurrency:
+  group: starthermal-tag-sync
+  cancel-in-progress: false
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: starthermal-build
+    outputs:
+      tag: ${{ steps.select.outputs.tag }}
+      release_state: ${{ steps.select.outputs.release_state }}
+    env:
+      STARTHERMAL_SOURCE_REPOSITORY: ${{ secrets.STARTHERMAL_SOURCE_REPOSITORY }}
+      MINIMUM_FIRMWARE_TAG: ${{ vars.STARTHERMAL_MINIMUM_TAG || 'v0.1.0' }}
+      REQUESTED_TAG: ${{ inputs.tag || '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Configure private source access
+        shell: bash
+        env:
+          READ_KEY: ${{ secrets.STARTHERMAL_READ_KEY }}
+          KNOWN_HOSTS: ${{ vars.UPSTREAM_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$STARTHERMAL_SOURCE_REPOSITORY"
+          test -n "$READ_KEY"
+          test -n "$KNOWN_HOSTS"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$READ_KEY" > "$HOME/.ssh/starthermal_read"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/starthermal_read" "$HOME/.ssh/known_hosts"
+          echo "GIT_SSH_COMMAND=ssh -i $HOME/.ssh/starthermal_read -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" >> "$GITHUB_ENV"
+      - name: Select an unpublished official version
+        id: select
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/starthermal_release.py select
+      - name: Fetch exact private tag
+        id: source
+        if: steps.select.outputs.tag != '' && inputs.check_only != true
+        env:
+          SOURCE_TAG: ${{ steps.select.outputs.source_tag }}
+        run: python scripts/starthermal_worker.py fetch
+      - name: Remove source credential before running build code
+        if: always()
+        run: rm -f "$HOME/.ssh/starthermal_read"
+      - name: Install pinned build tool
+        if: steps.select.outputs.tag != '' && inputs.check_only != true
+        run: python -m pip install --disable-pip-version-check --no-input platformio==6.1.19
+      - name: Build private source
+        if: steps.select.outputs.tag != '' && inputs.check_only != true
+        env:
+          STARTHERMAL_VERSION: ${{ steps.select.outputs.source_tag }}
+        run: python scripts/starthermal_worker.py build
+      - name: Create and verify unsigned package
+        if: steps.select.outputs.tag != '' && inputs.check_only != true
+        env:
+          RELEASE_TAG: ${{ steps.select.outputs.tag }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: python scripts/starthermal_release.py package --dist dist-starthermal --build .work/starthermal-output --tag "$RELEASE_TAG"
+      - name: Transfer allowlisted package
+        if: steps.select.outputs.tag != '' && inputs.check_only != true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.select.outputs.tag }}
+          path: dist-starthermal/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Encrypt private diagnostics on failure
+        if: failure() && inputs.check_only != true
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/starthermal-private.log"
+          if [ ! -f "$log" ]; then printf '%s\n' 'Failure before private build diagnostics were available.' > "$log"; fi
+          openssl cms -encrypt -binary -aes-256-cbc -in "$log" -outform DER -out "$RUNNER_TEMP/starthermal-diagnostics.cms" keys/starthermal-diagnostics-cert.pem
+          rm -f "$log"
+      - name: Upload encrypted diagnostics
+        if: failure() && inputs.check_only != true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: StarThermal-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/starthermal-diagnostics.cms
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Remove private source and logs
+        if: always()
+        run: |
+          rm -f "$HOME/.ssh/starthermal_read" "$RUNNER_TEMP/starthermal-private.log"
+          if [ -d .work/starthermal-source ]; then
+            chmod -R u+w .work/starthermal-source
+            rm -rf .work/starthermal-source
+          fi
+
+  publish:
+    needs: build
+    if: needs.build.outputs.tag != '' && inputs.check_only != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: starthermal-release
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.build.outputs.tag }}
+      RELEASE_STATE: ${{ needs.build.outputs.release_state }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.build.outputs.tag }}
+          path: dist-starthermal
+      - name: Revalidate independent build output
+        run: python scripts/starthermal_release.py verify --dist dist-starthermal --tag "$RELEASE_TAG" --unsigned
+      - name: Sign and verify
+        shell: bash
+        env:
+          SIGNING_KEY: ${{ secrets.STARTHERMAL_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SIGNING_KEY"
+          key="$RUNNER_TEMP/starthermal-signing"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$SIGNING_KEY" > "$key"
+          chmod 600 "$key"
+          ssh-keygen -Y sign -f "$key" -n file dist-starthermal/SHA256SUMS
+          python scripts/starthermal_release.py verify --dist dist-starthermal --tag "$RELEASE_TAG"
+      - name: Publish StarThermal without changing the legacy Latest release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/starthermal-notes.md"
+          printf '星像 StarThermal %s\n\n仅适用于星像 StarThermal。BIN 用于串口 OTA，UF2 用于恢复。请使用支持星像的新版 Studio，并先验证签名及哈希。\n' "$RELEASE_TAG" > "$notes"
+          if [ "$RELEASE_STATE" = missing ]; then
+            gh release create "$RELEASE_TAG" --draft --latest=false --target "$GITHUB_SHA" --title "星像 $RELEASE_TAG" --notes-file "$notes"
+          fi
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" = true
+          gh release upload "$RELEASE_TAG" dist-starthermal/* --clobber
+          expected="$(find dist-starthermal -maxdepth 1 -type f -printf '%f\n' | sort)"
+          actual="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | sort)"
+          test "$expected" = "$actual"
+          mkdir uploaded
+          gh release download "$RELEASE_TAG" --dir uploaded
+          python scripts/starthermal_release.py verify --dist uploaded --tag "$RELEASE_TAG"
+          gh release edit "$RELEASE_TAG" --draft=false --latest=false
