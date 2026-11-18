@@ -25,7 +25,7 @@ schema v3 固定 `product_id=starthermal`、`device_model=StarThermal`；OTA BIN
 
 ## 诊断与恢复
 
-失败日志使用 `keys/starthermal-diagnostics-cert.pem` 加密，仅上传 CMS 密文并保留一天。诊断解密私钥保存在私有源码仓库的 `starthermal-diagnostics` 独立分支，随附跨电脑恢复说明。它不进入固件 Tag，不保存到公开仓库或 Runner。所有具备该私有分支读取权限的账号都能取得诊断私钥。
+失败日志使用 `keys/starthermal-diagnostics-cert.pem` 加密，仅上传 CMS 密文并保留一天。诊断解密私钥保存在私有源码仓库的非版本标签 `starthermal-diagnostics-key`，随附跨电脑恢复说明。有私有仓库读取权限的账号可按此标签检出密钥。该标签不触发固件发布；密钥不在固件 main 或版本标签中，也不保存到公开仓库或构建 Runner。
 
 传输源码使用 SSH 加密；固件以可直接使用的 BIN/UF2 分发，并使用独立 Ed25519 发布密钥签名。诊断密钥和发布签名密钥用途不同。
 
